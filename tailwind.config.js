@@ -74,6 +74,9 @@ export default {
         "space-lg": "1.5rem"
       },
       fontFamily: {
+        "sans": ["Inter", "sans-serif"],
+        "display": ['"Plus Jakarta Sans"', "Inter", "sans-serif"],
+        "serif": ['"Newsreader"', "Georgia", "serif"],
         "body-md": ["Inter", "sans-serif"],
         "headline-lg": ["Inter", "sans-serif"],
         "body-sm": ["Inter", "sans-serif"],

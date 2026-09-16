@@ -66,6 +66,10 @@ export default function Layout() {
                 </div>
                 <img alt="Profile" className="w-8 h-8 rounded-full object-cover ring-2 ring-primary/20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6PbbzewuogXQPM7GBB0BQfz9iI8xs02VHnkoEsJljiNIx2YmR3VGO6yziNIq3T2uH_47TLKxYBIJxztOhJ1VxirZHFnGFgORpN12PkvMp4SX8Y1-J6VqHBmOMALQQ9sXvNCGqWRKiFgrQ8NcwL1Z12GCj7st_VCgxD3mwF82YJATfz3MHBdp5wT1wBQi7fRE8VdcDrBN87YP43AwXG_3V-BbNCMUGBkSV0lhHUAU2Cnv5oVKJ5jwNVg" />
               </div>
+              <div className="w-px h-6 bg-outline-variant/50"></div>
+              <NavLink to="/" className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container-high transition-colors text-error" title="Sign Out">
+                <span className="material-symbols-outlined text-[20px]">logout</span>
+              </NavLink>
             </div>
           </div>
         </header>
