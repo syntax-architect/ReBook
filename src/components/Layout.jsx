@@ -1,11 +1,14 @@
 import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { UserButton } from '@clerk/clerk-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const MotionNavLink = motion(NavLink);
 
 export default function Layout() {
   const location = useLocation();
+  const { terms, shop } = useAuth();
 
   const getNavClasses = ({ isActive }) => 
     isActive 
@@ -28,7 +31,7 @@ export default function Layout() {
               <span className="material-symbols-outlined text-primary">calendar_today</span>Dashboard
             </MotionNavLink>
             <MotionNavLink to="/services" className={getNavClasses} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}>
-              <span className="material-symbols-outlined text-primary">spa</span>Services
+              <span className="material-symbols-outlined text-primary">spa</span>{terms?.services || 'Services'}
             </MotionNavLink>
             <MotionNavLink to="/settings" className={getNavClasses} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }}>
               <span className="material-symbols-outlined text-primary">tune</span>Settings
@@ -61,15 +64,11 @@ export default function Layout() {
             <div className="flex items-center gap-space-lg">
               <div className="flex items-center gap-space-sm">
                 <div className="flex flex-col text-right">
-                  <span className="font-label-lg text-label-lg text-on-surface">Aura Wellness Studio &amp; Salon</span>
-                  <span className="font-body-sm text-body-sm text-on-surface-variant">Front Desk Manager</span>
+                  <span className="font-label-lg text-label-lg text-on-surface">{shop?.name || 'Complete Setup in Settings'}</span>
+                  <span className="font-body-sm text-body-sm text-on-surface-variant">Owner</span>
                 </div>
-                <img alt="Profile" className="w-8 h-8 rounded-full object-cover ring-2 ring-primary/20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6PbbzewuogXQPM7GBB0BQfz9iI8xs02VHnkoEsJljiNIx2YmR3VGO6yziNIq3T2uH_47TLKxYBIJxztOhJ1VxirZHFnGFgORpN12PkvMp4SX8Y1-J6VqHBmOMALQQ9sXvNCGqWRKiFgrQ8NcwL1Z12GCj7st_VCgxD3mwF82YJATfz3MHBdp5wT1wBQi7fRE8VdcDrBN87YP43AwXG_3V-BbNCMUGBkSV0lhHUAU2Cnv5oVKJ5jwNVg" />
+                <UserButton afterSignOutUrl="/" />
               </div>
-              <div className="w-px h-6 bg-outline-variant/50"></div>
-              <NavLink to="/" className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container-high transition-colors text-error" title="Sign Out">
-                <span className="material-symbols-outlined text-[20px]">logout</span>
-              </NavLink>
             </div>
           </div>
         </header>

@@ -1,65 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
-const initialServices = [
-  {
-    id: 1,
-    name: "HydraFacial Glow Treatment",
-    category: "Facials & Skin",
-    duration: "45m",
-    price: "2,000",
-    bookingsThisWeek: 18,
-    status: "active",
-    icon: "water_drop",
-    bgClass: "bg-primary-fixed/40 text-primary",
-    tag: "Popular"
-  },
-  {
-    id: 2,
-    name: "Deep Tissue Massage",
-    category: "Body Therapy",
-    duration: "60m+",
-    price: "1,500",
-    bookingsThisWeek: 12,
-    status: "active",
-    icon: "self_improvement",
-    bgClass: "bg-surface-container-high text-primary"
-  },
-  {
-    id: 3,
-    name: "Keratin Hair Spa & Cut",
-    category: "Hair Styling",
-    duration: "60m+", // Mocked as 75 in ui, let's use 60m+ category
-    price: "4,800",
-    bookingsThisWeek: 8,
-    status: "active",
-    icon: "content_cut",
-    bgClass: "bg-surface-container-high text-primary"
-  },
-  {
-    id: 4,
-    name: "Swedish Full Body Massage",
-    category: "Body Therapy",
-    duration: "60m+",
-    price: "2,200",
-    bookingsThisWeek: 5,
-    status: "active",
-    icon: "hot_tub",
-    bgClass: "bg-surface-container-high text-primary"
-  },
-  {
-    id: 5,
-    name: "Bridal Makeup & Skin Prep (VIP)",
-    category: "Bridal & Event",
-    duration: "60m+", // Mocked 120
-    price: "6,000",
-    bookingsThisWeek: 0,
-    status: "paused",
-    icon: "diamond",
-    bgClass: "bg-surface-container text-outline",
-    tag: "Seasonal"
-  }
-];
+const mapServiceToUI = (dbService) => ({
+  id: dbService.id,
+  name: dbService.name,
+  category: "General", // Schema doesn't have category yet
+  duration: dbService.duration_minutes >= 60 ? '60m+' : `${dbService.duration_minutes}m`,
+  price: dbService.price.toLocaleString('en-IN'),
+  priceRaw: dbService.price,
+  bookingsThisWeek: 0,
+  status: dbService.is_active ? "active" : "paused",
+  icon: "spa",
+  bgClass: dbService.is_active ? "bg-primary-container text-primary" : "bg-surface-container text-outline"
+});
 
 const emptyForm = {
   id: null,
@@ -71,7 +26,8 @@ const emptyForm = {
 };
 
 export default function Services() {
-  const [services, setServices] = useState(initialServices);
+  const { terms } = useAuth();
+  const [services, setServices] = useState([]);
   const [filterTab, setFilterTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState(emptyForm);
@@ -89,18 +45,40 @@ export default function Services() {
     setToast({ show: true, message, icon });
   };
 
-  const handleToggleStatus = (id) => {
-    setServices(prev => prev.map(s => {
-      if (s.id === id) {
-        const newStatus = s.status === 'active' ? 'paused' : 'active';
-        showToast(`Service ${newStatus}`);
-        return { ...s, status: newStatus };
+  const fetchServices = async () => {
+    let shopId = localStorage.getItem('rebook_shop_id');
+    if (!shopId) {
+      const { data } = await supabase.from('shops').select('id').limit(1).maybeSingle();
+      if (data) {
+        shopId = data.id;
+        localStorage.setItem('rebook_shop_id', shopId);
       }
-      return s;
-    }));
+    }
+    if (shopId) {
+      const { data } = await supabase.from('services').select('*').eq('shop_id', shopId).order('created_at', { ascending: false });
+      if (data) {
+        setServices(data.map(mapServiceToUI));
+      }
+    }
   };
 
-  const handleDelete = (id) => {
+  useEffect(() => {
+    fetchServices();
+  }, []);
+
+  const handleToggleStatus = async (id) => {
+    const service = services.find(s => s.id === id);
+    const newIsActive = service.status === 'paused';
+    
+    // Optimistic update
+    setServices(prev => prev.map(s => s.id === id ? { ...s, status: newIsActive ? 'active' : 'paused' } : s));
+    
+    await supabase.from('services').update({ is_active: newIsActive }).eq('id', id);
+    showToast(`Service ${newIsActive ? 'activated' : 'paused'}`);
+  };
+
+  const handleDelete = async (id) => {
+    await supabase.from('services').delete().eq('id', id);
     setServices(prev => prev.filter(s => s.id !== id));
     showToast('Service deleted', 'delete');
     if (formData.id === id) {
@@ -114,51 +92,50 @@ export default function Services() {
       name: service.name,
       category: service.category,
       duration: service.duration,
-      price: service.price.replace(/,/g, ''),
+      price: service.priceRaw || service.price.replace(/,/g, ''),
       description: service.description || ''
     });
-    // Scroll to top mobile
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name) {
-      showToast('Service name is required', 'error');
-      return;
+    if (!formData.name) return showToast('Service name is required', 'error');
+
+    let shopId = localStorage.getItem('rebook_shop_id');
+    if (!shopId) {
+      const { data } = await supabase.from('shops').select('id').limit(1).maybeSingle();
+      if (data) {
+        shopId = data.id;
+        localStorage.setItem('rebook_shop_id', shopId);
+      } else {
+         return showToast('Please setup Business Profile first', 'error');
+      }
     }
 
-    const priceFormatted = Number(formData.price).toLocaleString('en-IN');
+    const duration_minutes = parseInt(formData.duration.replace('m', '').replace('+', '')) || 45;
+    const priceInt = parseInt(formData.price) || 0;
     
     if (formData.id) {
-      // Update
-      setServices(prev => prev.map(s => s.id === formData.id ? {
-        ...s,
+      await supabase.from('services').update({
         name: formData.name,
-        category: formData.category,
-        duration: formData.duration,
-        price: priceFormatted,
-        description: formData.description
-      } : s));
+        duration_minutes,
+        price: priceInt
+      }).eq('id', formData.id);
       showToast('Service updated successfully');
     } else {
-      // Add
-      const newService = {
-        id: Date.now(),
+      await supabase.from('services').insert({
+        shop_id: shopId,
         name: formData.name,
-        category: formData.category,
-        duration: formData.duration,
-        price: priceFormatted,
-        bookingsThisWeek: 0,
-        status: "active",
-        icon: "spa", // generic icon
-        bgClass: "bg-primary-container text-primary",
-        description: formData.description
-      };
-      setServices(prev => [...prev, newService]);
+        duration_minutes,
+        price: priceInt,
+        is_active: true
+      });
       showToast('New service added');
     }
+    
     setFormData(emptyForm);
+    fetchServices(); // Refresh list
   };
 
   const filteredServices = services.filter(s => {
@@ -210,7 +187,7 @@ export default function Services() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-space-md mb-space-lg">
           <div className="bg-surface-container-lowest rounded-xl p-space-md shadow-sm flex items-center justify-between">
             <div className="flex flex-col">
-              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Configured Services</span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Configured {terms.services}</span>
               <span className="font-headline-md text-headline-md text-on-surface mt-0.5">{services.length} Items</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-primary">
@@ -359,7 +336,7 @@ export default function Services() {
               </AnimatePresence>
               {filteredServices.length === 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 text-on-surface-variant font-label-lg">
-                  No services found.
+                  No {terms.services} found.
                 </motion.div>
               )}
             </div>
@@ -384,11 +361,14 @@ export default function Services() {
             <div className="bg-surface-container-lowest rounded-xl p-space-lg shadow-sm border border-outline-variant/30">
               {/* Header */}
               <div className="flex items-center justify-between pb-space-sm mb-space-md">
-                <div className="flex flex-col">
-                  <h2 className="font-headline-md text-headline-md text-on-surface">
-                    {formData.id ? 'Edit Service' : 'Add New Service'}
-                  </h2>
-                  <span className="font-body-sm text-body-sm text-on-surface-variant">Changes update your WhatsApp catalog immediately</span>
+                <div className="flex items-center gap-space-sm">
+                  <div className="w-10 h-10 rounded-xl bg-primary-fixed text-primary flex items-center justify-center">
+                    <span className="material-symbols-outlined text-xl">add_box</span>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-on-surface tracking-tight">{formData.id ? 'Edit' : 'Add New'} {terms.service}</h2>
+                    <p className="text-[11px] text-on-surface-variant/80 mt-0.5">Define pricing, duration, and metadata.</p>
+                  </div>
                 </div>
                 <span className={`w-8 h-8 rounded-full flex items-center justify-center ${formData.id ? 'bg-secondary-container text-secondary' : 'bg-surface-container text-primary'}`}>
                   <span className="material-symbols-outlined text-lg">{formData.id ? 'edit' : 'add_circle'}</span>
@@ -397,16 +377,18 @@ export default function Services() {
               
               <form className="flex flex-col gap-space-md" onSubmit={handleFormSubmit}>
                 {/* Service Name */}
-                <div className="flex flex-col gap-1">
-                  <label className="font-label-md text-label-md text-on-surface">Service Name</label>
-                  <input 
-                    required 
-                    className="w-full h-10 px-3 rounded-lg bg-surface-container-low font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 focus:ring-primary/20" 
-                    placeholder="e.g., Aromatherapy Massage" 
-                    type="text" 
-                    value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                  />
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="block text-xs font-semibold text-on-surface-variant tracking-wide uppercase">{terms.service} Name</label>
+                  <div className="relative">
+                    <input 
+                      required 
+                      type="text" 
+                      value={formData.name} 
+                      onChange={e => setFormData({...formData, name: e.target.value})} 
+                      className="w-full bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all font-medium" 
+                      placeholder={`e.g. Signature ${terms.service}`} 
+                    />
+                  </div>
                 </div>
                 
                 {/* Category */}

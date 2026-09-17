@@ -1,10 +1,14 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { SignedIn } from '@clerk/clerk-react';
 
 export default function Landing() {
   return (
     <>
+      <SignedIn>
+        <Navigate to="/dashboard" replace />
+      </SignedIn>
       {/* Custom styles from the original HTML head */}
       <style>{`
         .whatsapp-chat-bg {
@@ -16,7 +20,7 @@ export default function Landing() {
       {/* Render the converted HTML */}
       <div className="min-h-screen bg-[#FAFAFA] font-sans antialiased overflow-x-hidden text-slate-900">
 {/* HEADER / NAVIGATION: Pristine, refined, minimal */}
-<header className="sticky top-0 z-50 backdrop-blur-md bg-white/85 border-b border-slate-200/70 transition-all">
+<header className="sticky top-0 z-50 backdrop-blur-lg bg-white/70 border-b border-slate-200/70 transition-all shadow-sm">
 <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
 {/* Brand Mark */}
 <a className="flex items-center gap-2.5 group" href="#">
@@ -43,9 +47,9 @@ export default function Landing() {
 <Link className="hidden sm:inline-flex px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors" to="/login">
         Sign in
       </Link>
-<a className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 shadow-subtle transition-all duration-150 active:scale-[0.99]" href="#trial">
+<motion.a whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 shadow-md hover:shadow-lg transition-all duration-150 cursor-pointer" href="#trial">
 <span>Start Free Trial</span>
-</a>
+</motion.a>
 </div>
 </div>
 </header>
@@ -460,7 +464,7 @@ export default function Landing() {
 <span>Practitioner Chairs / Treatment Rooms</span>
 <span className="font-semibold text-slate-900">4 Chairs</span>
 </div>
-<input className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" max="20" min="1" type="range" value="4"/>
+<input className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" max="20" min="1" type="range" defaultValue="4"/>
 <div className="flex justify-between text-[10px] text-slate-400 mt-1">
 <span>1 Solo Chair</span>
 <span>10 Suites</span>
@@ -472,7 +476,7 @@ export default function Landing() {
 <span>Average Ticket Size per Treatment</span>
 <span className="font-semibold text-slate-900">₹2,800</span>
 </div>
-<input className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" max="15000" min="1000" step="500" type="range" value="2800"/>
+<input className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900" max="15000" min="1000" step="500" type="range" defaultValue="2800"/>
 <div className="flex justify-between text-[10px] text-slate-400 mt-1">
 <span>₹1,000 (Express Salon)</span>
 <span>₹5,000 (Aesthetic Derma)</span>
@@ -516,13 +520,13 @@ export default function Landing() {
         Connect your appointment calendar in 3 minutes. Turn on verified WhatsApp reminders, and eliminate empty treatment chairs tomorrow morning.
       </p>
 <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-<a className="w-full sm:w-auto px-5 py-2.5 rounded-lg font-medium text-sm text-white bg-slate-900 hover:bg-slate-800 shadow-subtle transition-all flex items-center justify-center gap-1.5" href="#">
+<motion.a whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full sm:w-auto px-5 py-2.5 rounded-lg font-medium text-sm text-white bg-slate-900 hover:bg-slate-800 shadow-md transition-all flex items-center justify-center gap-1.5" href="#">
 <span>Start 14-Day Free Trial</span>
 <span className="material-symbols-outlined text-sm">arrow_forward</span>
-</a>
-<a className="w-full sm:w-auto px-5 py-2.5 rounded-lg font-medium text-sm text-slate-700 hover:text-slate-900 bg-white border border-slate-200 shadow-subtle hover:bg-slate-50 transition-all flex items-center justify-center gap-2" href="#demo">
+</motion.a>
+<motion.a whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-full sm:w-auto px-5 py-2.5 rounded-lg font-medium text-sm text-slate-700 hover:text-slate-900 bg-white border border-slate-200 shadow-sm hover:shadow transition-all flex items-center justify-center gap-2" href="#demo">
 <span>Schedule Concierge Setup</span>
-</a>
+</motion.a>
 </div>
 {/* Trust signals */}
 <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400">

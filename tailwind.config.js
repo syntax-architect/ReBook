@@ -62,6 +62,11 @@ export default {
         xl: "0.75rem",
         full: "9999px"
       },
+      boxShadow: {
+        'subtle': '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03)',
+        'elevated': '0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.03)',
+      },
       spacing: {
         "gutter": "1.5rem",
         "gutter-mobile": "0.75rem",

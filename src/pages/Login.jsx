@@ -1,13 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { supabase } from '../lib/supabase';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [businessName, setBusinessName] = useState('');
+  const [industry, setIndustry] = useState('salon');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
   
-  const handleLogin = (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
-    navigate('/dashboard');
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (authError) throw authError;
+
+        if (authData.user) {
+          const slug = businessName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random()*1000);
+          const { error: shopError } = await supabase.from('shops').insert({
+            name: businessName,
+            slug,
+            industry,
+            owner_id: authData.user.id
+          });
+          if (shopError) throw shopError;
+          navigate('/dashboard');
+        }
+      } else {
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        if (authError) throw authError;
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -56,15 +98,15 @@ export default function Login() {
 <span className="">Secure Merchant Portal</span>
 </div>
 <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight font-display">
-          Welcome back to Rebook.
+          {isSignUp ? 'Create your account' : 'Welcome back to Rebook.'}
         </h1>
 <p className="mt-2.5 text-sm text-slate-500 leading-relaxed font-normal">
-          Log in to manage your clinic appointments, automated WhatsApp dispatches, and waitlist auto-backfills.
+          {isSignUp ? 'Sign up to start automating your business operations.' : 'Log in to manage your appointments, automated WhatsApp dispatches, and waitlist auto-backfills.'}
         </p>
 </div>
 {/* Quick SSO Options */}
 <div className="space-y-3 mb-6">
-<button className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white hover:bg-slate-50/80 border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 shadow-sm hover:shadow transition-all duration-150 active:scale-[0.99]" type="button">
+<motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} className="w-full flex items-center justify-center gap-3 px-4 py-2.5 bg-white hover:bg-slate-50/80 border border-slate-200/90 rounded-xl text-xs sm:text-sm font-semibold text-slate-700 shadow-sm hover:shadow-md transition-shadow" type="button">
 <svg className="w-4 h-4" viewBox="0 0 24 24">
 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
@@ -72,68 +114,76 @@ export default function Login() {
 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"></path>
 </svg>
 <span className="">Continue with Google Workspace</span>
-</button>
+</motion.button>
 </div>
 <div className="relative flex items-center justify-center my-6">
 <div className="border-t border-slate-200/80 w-full"></div>
 <span className="bg-white px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wider absolute">or sign in with email</span>
 </div>
 {/* Main Login Form */}
-<form action="#" className="space-y-4" method="POST" onSubmit={handleLogin}>
+<form className="space-y-4" onSubmit={handleAuth}>
+{error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm border border-red-200">{error}</div>}
+
+{isSignUp && (
+  <>
+    <div>
+      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Business Name</label>
+      <input value={businessName} onChange={e => setBusinessName(e.target.value)} required type="text" className="block w-full px-4 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3730A3]/15 focus:border-[#3730A3] transition-all duration-150 shadow-sm" placeholder="e.g. Aura Wellness" />
+    </div>
+    <div>
+      <label className="block text-xs font-semibold text-slate-700 mb-1.5">Industry</label>
+      <select value={industry} onChange={e => setIndustry(e.target.value)} className="block w-full px-4 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3730A3]/15 focus:border-[#3730A3] transition-all duration-150 shadow-sm bg-white">
+        <option value="salon">Salon & Spa</option>
+        <option value="gym">Gym & Fitness</option>
+        <option value="cafe">Cafe & Restaurant</option>
+        <option value="clinic">Clinic & Healthcare</option>
+      </select>
+    </div>
+  </>
+)}
+
 {/* Email Input */}
 <div>
-<label className="block text-xs font-semibold text-slate-700 mb-1.5" for="email">Email Address</label>
+<label className="block text-xs font-semibold text-slate-700 mb-1.5" htmlFor="email">Email Address</label>
 <div className="relative rounded-xl">
 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
 <i className="fa-regular fa-envelope text-sm"></i>
 </div>
-<input className="block w-full pl-10 pr-4 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3730A3]/15 focus:border-[#3730A3] transition-all duration-150 shadow-sm" id="email" name="email" placeholder="clinic@aura-wellness.com" required type="email" defaultValue="dr.radhika@skinaura.in" />
+<input value={email} onChange={e => setEmail(e.target.value)} className="block w-full pl-10 pr-4 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3730A3]/15 focus:border-[#3730A3] transition-all duration-150 shadow-sm" id="email" name="email" placeholder="hello@example.com" required type="email" />
 </div>
 </div>
 {/* Password Input */}
 <div>
 <div className="flex items-center justify-between mb-1.5">
-<label className="block text-xs font-semibold text-slate-700" for="password">Password</label>
+<label className="block text-xs font-semibold text-slate-700" htmlFor="password">Password</label>
+{!isSignUp && (
 <a className="text-xs font-semibold text-[#3730A3] hover:text-[#312e81] transition-colors" href="#">
               Forgot Password?
             </a>
+)}
 </div>
 <div className="relative rounded-xl">
 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
 <i className="fa-solid fa-key text-xs"></i>
 </div>
-<input className="block w-full pl-10 pr-10 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3730A3]/15 focus:border-[#3730A3] transition-all duration-150 shadow-sm" id="password" name="password" placeholder="••••••••••••" required type="password" defaultValue="••••••••••••" />
-<button className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors" type="button">
-<i className="fa-regular fa-eye text-xs"></i>
-</button>
+<input value={password} onChange={e => setPassword(e.target.value)} className="block w-full pl-10 pr-10 py-2.5 text-sm text-slate-800 bg-white border border-slate-200 rounded-xl placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3730A3]/15 focus:border-[#3730A3] transition-all duration-150 shadow-sm" id="password" name="password" placeholder="••••••••••••" required type="password" />
 </div>
-</div>
-{/* Remember me & Security details */}
-<div className="flex items-center justify-between pt-1">
-<label className="flex items-center gap-2 cursor-pointer select-none">
-<input defaultChecked className="w-4 h-4 text-[#3730A3] border-slate-300 rounded focus:ring-[#3730A3] focus:ring-offset-0 transition" type="checkbox" />
-<span className="text-xs font-medium text-slate-600">Keep me logged in for 30 days</span>
-</label>
-<span className="text-[11px] text-slate-400 flex items-center gap-1">
-<i className="fa-solid fa-shield-halved text-emerald-600 text-[10px]"></i>
-            256-bit SSL
-          </span>
 </div>
 {/* Primary Submit Button */}
 <div className="pt-2">
-<button className="group relative w-full flex items-center justify-center gap-2 py-3 px-5 text-sm font-semibold rounded-xl text-white bg-[#3730A3] hover:bg-[#312e81] shadow-sm hover:shadow transition-all duration-200 active:scale-[0.99] cursor-pointer" type="submit">
-<span className="">Sign In to Rebook</span>
+<motion.button disabled={loading} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} className="group relative w-full flex items-center justify-center gap-2 py-3 px-5 text-sm font-semibold rounded-xl text-white bg-[#3730A3] hover:bg-[#312e81] shadow-md hover:shadow-lg transition-shadow cursor-pointer disabled:opacity-70" type="submit">
+<span className="">{loading ? 'Processing...' : isSignUp ? 'Sign Up' : 'Sign In to Rebook'}</span>
 <i className="fa-solid fa-arrow-right text-xs transition-transform group-hover:translate-x-1"></i>
-</button>
+</motion.button>
 </div>
 </form>
 {/* Subtext / Callout */}
 <div className="mt-8 text-center">
 <p className="text-xs text-slate-500">
-          Don't have an account? 
-          <a className="font-semibold text-[#3730A3] hover:text-[#312e81] underline underline-offset-4 decoration-indigo-200 hover:decoration-[#3730A3] transition-all" href="#">
-            Start your free trial
-          </a>
+          {isSignUp ? 'Already have an account? ' : "Don't have an account? "} 
+          <button onClick={() => setIsSignUp(!isSignUp)} className="font-semibold text-[#3730A3] hover:text-[#312e81] underline underline-offset-4 decoration-indigo-200 hover:decoration-[#3730A3] transition-all" type="button">
+            {isSignUp ? 'Log in instead' : 'Start your free trial'}
+          </button>
 </p>
 </div>
 {/* Quick Trust Indicators on Mobile */}
@@ -159,11 +209,36 @@ export default function Login() {
 {/* RIGHT SIDE: Editorial Luxury Architectural Showcase (Aman / Aesop Quiet Luxury) */}
 <div className="hidden lg:flex lg:w-1/2 relative bg-[#181615] overflow-hidden flex-col justify-between p-10 xl:p-14 min-h-screen text-white">
 {/* Architectural Spa / Clinic Background Image with Sophisticated Warm Dark Vignette */}
-<div className="absolute inset-0 z-0">
-<img alt="Luxury aesthetic clinic and wellness reception interior in Rebook brand tones" className="w-full h-full object-cover object-center transform scale-[1.02] filter contrast-[0.98] brightness-[0.88]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuChqDM_RcGc2M6AKL12QeTQQXB1ov9oQrtbX2LkU0XyciddZ5Ygp1BOxABL94zb0Fey_pTZ1Zf4Ek8DNV-cXrBf3s7LvBi9WNjVmaDfMa3FG2RzotPxhcmv87zIWRikEYo4SfOjcHr2iTBuFHinLsE-Xex_a8WlJEJn6kOCG-zuMI9yi13G8YCOKzj19rF3cnjpaoB2RCeJwRvu2NsIDXqYgMPg8zLySur0-JiLClKJxdAXCZg8gOT8UQ" />
+<div className="absolute inset-0 z-0 overflow-hidden">
+<motion.div 
+  animate={{ 
+    x: [0, 50, -50, 0], 
+    y: [0, -50, 50, 0],
+    scale: [1, 1.1, 0.9, 1] 
+  }}
+  transition={{ 
+    duration: 25, 
+    repeat: Infinity,
+    ease: "linear"
+  }}
+  className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-emerald-500/15 rounded-full blur-[120px] mix-blend-screen"
+/>
+<motion.div 
+  animate={{ 
+    x: [0, -60, 40, 0], 
+    y: [0, 60, -40, 0],
+  }}
+  transition={{ 
+    duration: 30, 
+    repeat: Infinity,
+    ease: "linear"
+  }}
+  className="absolute bottom-1/4 left-1/4 w-[400px] h-[400px] bg-amber-500/10 rounded-full blur-[100px] mix-blend-screen"
+/>
+<img alt="Luxury aesthetic clinic and wellness reception interior in Rebook brand tones" className="relative w-full h-full object-cover object-center transform scale-[1.02] filter contrast-[0.98] brightness-[0.88] z-10 opacity-90" src="https://lh3.googleusercontent.com/aida-public/AB6AXuChqDM_RcGc2M6AKL12QeTQQXB1ov9oQrtbX2LkU0XyciddZ5Ygp1BOxABL94zb0Fey_pTZ1Zf4Ek8DNV-cXrBf3s7LvBi9WNjVmaDfMa3FG2RzotPxhcmv87zIWRikEYo4SfOjcHr2iTBuFHinLsE-Xex_a8WlJEJn6kOCG-zuMI9yi13G8YCOKzj19rF3cnjpaoB2RCeJwRvu2NsIDXqYgMPg8zLySur0-JiLClKJxdAXCZg8gOT8UQ" />
 {/* Multi-layered warm editorial film scrims */}
-<div className="absolute inset-0 bg-gradient-to-t from-[#0e0d0c] via-[#121110]/55 to-[#1c1a17]/70"></div>
-<div className="absolute inset-0 bg-stone-950/20 backdrop-blur-[0.5px]"></div>
+<div className="absolute inset-0 bg-gradient-to-t from-[#0e0d0c] via-[#121110]/60 to-[#1c1a17]/80 z-20"></div>
+<div className="absolute inset-0 bg-stone-950/20 backdrop-blur-[0.5px] z-20"></div>
 </div>
 {/* Top Row: Minimalist B2B Architectural Badges */}
 <div className="relative z-10 flex items-center justify-between w-full">

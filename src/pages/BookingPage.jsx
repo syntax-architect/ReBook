@@ -1,7 +1,117 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function BookingPage() {
+  const { shopSlug } = useParams();
+  const [shop, setShop] = useState(null);
+  const [services, setServices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  const [selectedService, setSelectedService] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(0);
+  const [selectedTime, setSelectedTime] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  
+  const dates = useMemo(() => Array.from({ length: 4 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    return {
+      offset: i,
+      dayName: i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' }),
+      dayNumber: d.getDate(),
+      fullDate: d
+    };
+  }), []);
+  
+  const availableTimes = useMemo(() => ['10:00 AM', '11:30 AM', '01:15 PM', '02:45 PM', '04:00 PM', '05:30 PM'], []);
+
+  useEffect(() => {
+    const fetchShopData = async () => {
+      try {
+        const { data: shopData, error: shopError } = await supabase
+          .from('shops')
+          .select('*')
+          .eq('slug', shopSlug)
+          .single();
+          
+        if (shopError || !shopData) {
+          setLoading(false);
+          return;
+        }
+        
+        setShop(shopData);
+        
+        const { data: servicesData } = await supabase
+          .from('services')
+          .select('*')
+          .eq('shop_id', shopData.id)
+          .eq('is_active', true);
+          
+        setServices(servicesData || []);
+        if (servicesData?.length > 0) setSelectedService(servicesData[0]);
+      } catch (err) {
+        console.error("Error fetching shop data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchShopData();
+  }, [shopSlug]);
+
+  const handleBookAppointment = async () => {
+    if (!selectedService || !selectedTime || !customerName || !customerPhone || isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      const [timeStr, meridiem] = selectedTime.split(' ');
+      let [hours, mins] = timeStr.split(':');
+      hours = parseInt(hours);
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+      
+      const scheduled_at = new Date(dates[selectedDate].fullDate);
+      scheduled_at.setHours(hours, parseInt(mins), 0, 0);
+
+      const { error } = await supabase.from('bookings').insert({
+        shop_id: shop.id,
+        service_id: selectedService.id,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        scheduled_at: scheduled_at.toISOString(),
+        status: 'new'
+      });
+      
+      if (!error) {
+        setShowSuccess(true);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen bg-surface flex items-center justify-center font-label-md text-on-surface">Loading booking portal...</div>;
+  }
+
+  if (!shop) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6 text-center">
+        <span className="material-symbols-outlined text-[48px] text-on-surface-variant mb-4">search_off</span>
+        <h1 className="font-headline-lg text-headline-lg text-on-surface mb-2">Shop Not Found</h1>
+        <p className="font-body-md text-body-md text-on-surface-variant max-w-md">The booking link you followed doesn't seem to exist. Please verify the link with the business owner.</p>
+      </div>
+    );
+  }
+
   return (
     <>
 <div className=""><main className="w-full bg-surface min-h-screen px-margin"><div className="min-h-screen py-8 sm:py-12 px-4 sm:px-6 flex flex-col items-center justify-between">
@@ -11,13 +121,13 @@ export default function BookingPage() {
       <div className="w-9 h-9 rounded-xl bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
         <span className="material-symbols-outlined text-[20px]">spa</span>
       </div>
-      <span className="font-headline-sm text-headline-sm text-on-surface tracking-tight">Aura Wellness</span>
+      <span className="font-headline-sm text-headline-sm text-on-surface tracking-tight">{shop.name}</span>
     </div>
     <div className="flex items-center gap-2">
       <span className="hidden sm:inline-flex items-center gap-1 text-label-sm font-label-sm text-secondary bg-secondary-container/40 px-3 py-1 rounded-full">
         <span className="w-1.5 h-1.5 rounded-full bg-secondary"></span> Instant WhatsApp Booking
       </span>
-      <button type="button" className="p-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors" title="Share Link">
+      <button type="button" onClick={() => { navigator.clipboard.writeText(window.location.href); alert('Link copied!'); }} className="p-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface transition-colors" title="Share Link">
         <span className="material-symbols-outlined text-[18px]">share</span>
       </button>
     </div>
@@ -34,13 +144,13 @@ export default function BookingPage() {
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <h1 className="font-headline-md text-headline-md text-on-surface">Aura Wellness</h1>
+              <h1 className="font-headline-md text-headline-md text-on-surface">{shop.name}</h1>
               <span className="material-symbols-outlined text-secondary text-[18px]" title="Verified Merchant">verified</span>
             </div>
-            <span className="font-body-sm text-body-sm text-on-surface-variant">Studio &amp; Aesthetic Spa</span>
+            <span className="font-body-sm text-body-sm text-on-surface-variant capitalize">{shop.industry} • Verified Partner</span>
             <div className="flex items-center gap-1.5 font-body-sm text-body-sm text-on-surface-variant mt-1">
               <span className="material-symbols-outlined text-primary text-[16px]">location_on</span>
-              <span className="">100ft Rd, Indiranagar, Bengaluru</span>
+              <span className="">{shop.city || 'Location unavailable'}</span>
             </div>
           </div>
         </div>
@@ -70,48 +180,37 @@ export default function BookingPage() {
             <span className="w-6 h-6 rounded-full bg-primary-container text-on-primary font-label-sm text-label-sm flex items-center justify-center font-bold">1</span>
             <h2 className="font-headline-sm text-headline-sm text-on-surface">Select Service</h2>
           </div>
-          <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">1 service selected</span>
+          <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">{selectedService ? '1 service selected' : '0 selected'}</span>
         </div>
         <div className="space-y-3">
-          {/*  HydraFacial Glow (Selected)  */}
-          <div className="relative p-4 rounded-2xl bg-surface-container-low border-2 border-primary shadow-sm transition-all cursor-pointer">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">HydraFacial Glow Treatment</span>
-                  <span className="px-2 py-0.5 rounded-full bg-primary text-on-primary font-label-sm text-[10px] tracking-wide font-medium">POPULAR</span>
-                </div>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Deep pore suction, hyaluronic hydration booster, and lymphatic radiance finish.</p>
-                <div className="flex items-center gap-4 pt-1">
-                  <span className="font-headline-sm text-headline-sm text-primary font-bold">₹2,000</span>
-                  <span className="flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant">
-                    <span className="material-symbols-outlined text-[16px]">schedule</span> 45 mins
-                  </span>
+          {services.map(service => {
+            const isSelected = selectedService?.id === service.id;
+            return (
+              <div key={service.id} onClick={() => setSelectedService(service)} className={`relative p-4 rounded-2xl transition-all cursor-pointer ${isSelected ? 'bg-surface-container-low border-2 border-primary shadow-sm' : 'bg-surface-container-lowest hover:bg-surface-container-low/60 border border-outline-variant/60 shadow-sm'}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{service.name}</span>
+                    </div>
+                    <div className="flex items-center gap-4 pt-1">
+                      <span className="font-headline-sm text-headline-sm text-primary font-bold">₹{service.price?.toLocaleString('en-IN') || 0}</span>
+                      <span className="flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant">
+                        <span className="material-symbols-outlined text-[16px]">schedule</span> {service.duration_minutes} mins
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-primary text-on-primary shadow-sm' : 'border-2 border-outline-variant'}`}>
+                    {isSelected && <span className="material-symbols-outlined text-[16px]">check</span>}
+                  </div>
                 </div>
               </div>
-              <div className="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center flex-shrink-0 shadow-sm">
-                <span className="material-symbols-outlined text-[16px]">check</span>
-              </div>
+            );
+          })}
+          {services.length === 0 && (
+            <div className="p-4 rounded-2xl bg-surface-container-lowest border border-outline-variant/60 text-center text-on-surface-variant font-body-sm">
+              No active services found for this shop.
             </div>
-          </div>
-          {/*  Deep Tissue Massage  */}
-          <div className="p-4 rounded-2xl bg-surface-container-lowest hover:bg-surface-container-low/60 border border-outline-variant/60 shadow-sm transition-all cursor-pointer">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">Deep Tissue Massage</span>
-                </div>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Therapeutic muscle relief using organic eucalyptus oils &amp; herbal hot stone compress.</p>
-                <div className="flex items-center gap-4 pt-1">
-                  <span className="font-headline-sm text-headline-sm text-on-surface font-bold">₹1,500</span>
-                  <span className="flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant">
-                    <span className="material-symbols-outlined text-[16px]">schedule</span> 60 mins
-                  </span>
-                </div>
-              </div>
-              <div className="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center flex-shrink-0"></div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -123,55 +222,35 @@ export default function BookingPage() {
             <h2 className="font-headline-sm text-headline-sm text-on-surface">Select Date &amp; Time</h2>
           </div>
           <span className="font-label-sm text-label-sm text-primary font-semibold flex items-center gap-1">
-            <span className="material-symbols-outlined text-[16px]">calendar_month</span> October 2024
+            <span className="material-symbols-outlined text-[16px]">calendar_month</span> {dates[selectedDate].fullDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
           </span>
         </div>
         <div className="grid grid-cols-4 gap-2.5 sm:gap-3">
-          <button className="flex flex-col items-center py-3 px-2 rounded-xl bg-primary-container text-on-primary shadow-sm transition-transform active:scale-95" type="button">
-            <span className="px-2 py-0.5 rounded-full bg-white/20 font-label-sm text-[10px] mb-1 font-medium">Today</span>
-            <span className="font-label-sm text-label-sm text-primary-fixed font-medium">Thu</span>
-            <span className="font-headline-md text-headline-md leading-none mt-1 font-bold">24</span>
-          </button>
-          <button className="flex flex-col items-center py-3 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface transition-transform active:scale-95 border border-transparent hover:border-outline-variant/40" type="button">
-            <span className="h-4"></span>
-            <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">Fri</span>
-            <span className="font-headline-md text-headline-md leading-none mt-1 font-bold">25</span>
-          </button>
-          <button className="flex flex-col items-center py-3 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface transition-transform active:scale-95 border border-transparent hover:border-outline-variant/40" type="button">
-            <span className="h-4"></span>
-            <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">Sat</span>
-            <span className="font-headline-md text-headline-md leading-none mt-1 font-bold">26</span>
-          </button>
-          <button className="flex flex-col items-center py-3 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface transition-transform active:scale-95 border border-transparent hover:border-outline-variant/40" type="button">
-            <span className="h-4"></span>
-            <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">Sun</span>
-            <span className="font-headline-md text-headline-md leading-none mt-1 font-bold">27</span>
-          </button>
+          {dates.map(dateObj => {
+            const isSelected = selectedDate === dateObj.offset;
+            return (
+              <button key={dateObj.offset} onClick={() => setSelectedDate(dateObj.offset)} className={`flex flex-col items-center py-3 px-2 rounded-xl transition-transform active:scale-95 border ${isSelected ? 'bg-primary-container text-on-primary shadow-sm border-transparent' : 'bg-surface-container-low hover:bg-surface-container text-on-surface border-transparent hover:border-outline-variant/40'}`} type="button">
+                {dateObj.offset === 0 ? <span className="px-2 py-0.5 rounded-full bg-white/20 font-label-sm text-[10px] mb-1 font-medium">Today</span> : <span className="h-4 mb-1"></span>}
+                <span className={`font-label-sm text-label-sm font-medium ${isSelected ? 'text-primary-fixed' : 'text-on-surface-variant'}`}>{dateObj.offset === 0 && !isSelected ? 'Today' : dateObj.dayName}</span>
+                <span className="font-headline-md text-headline-md leading-none mt-1 font-bold">{dateObj.dayNumber}</span>
+              </button>
+            );
+          })}
         </div>
         <div className="pt-2">
           <div className="flex items-center justify-between pb-2.5">
-            <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">Available Afternoon &amp; Evening Slots</span>
-            <span className="font-label-sm text-label-sm text-secondary font-semibold">6 open</span>
+            <span className="font-label-sm text-label-sm text-on-surface-variant font-medium">Available Open Slots</span>
+            <span className="font-label-sm text-label-sm text-secondary font-semibold">{availableTimes.length} open</span>
           </div>
           <div className="grid grid-cols-3 gap-2.5">
-            <button className="py-2.5 px-2 rounded-xl bg-primary text-on-primary font-label-sm text-label-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm" type="button">
-              <span className="material-symbols-outlined text-[15px]">done</span> 10:00 AM
-            </button>
-            <button className="py-2.5 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm font-medium border border-transparent hover:border-outline-variant/40" type="button">
-              11:30 AM
-            </button>
-            <button className="py-2.5 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm font-medium border border-transparent hover:border-outline-variant/40" type="button">
-              01:15 PM
-            </button>
-            <button className="py-2.5 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm font-medium border border-transparent hover:border-outline-variant/40" type="button">
-              02:45 PM
-            </button>
-            <button className="py-2.5 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm font-medium border border-transparent hover:border-outline-variant/40" type="button">
-              04:00 PM
-            </button>
-            <button className="py-2.5 px-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-label-sm text-label-sm font-medium border border-transparent hover:border-outline-variant/40" type="button">
-              05:30 PM
-            </button>
+            {availableTimes.map(time => {
+              const isSelected = selectedTime === time;
+              return (
+                <button key={time} onClick={() => setSelectedTime(time)} className={`py-2.5 px-2 rounded-xl font-label-sm text-label-sm font-semibold flex items-center justify-center gap-1.5 ${isSelected ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container-low hover:bg-surface-container text-on-surface border border-transparent hover:border-outline-variant/40'}`} type="button">
+                  {isSelected && <span className="material-symbols-outlined text-[15px]">done</span>} {time}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="p-3.5 rounded-xl bg-[#DCF8C6]/60 border border-[#DCF8C6] flex items-start gap-2.5 shadow-xs">
@@ -193,7 +272,7 @@ export default function BookingPage() {
             <label className="block font-label-sm text-label-sm text-on-surface-variant font-medium mb-1.5">Full Name</label>
             <div className="relative flex items-center">
               <span className="material-symbols-outlined text-on-surface-variant absolute left-3 text-[18px]">person</span>
-              <input className="w-full h-11 pl-10 pr-3 rounded-xl bg-surface-container-low border border-outline-variant/50 text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" placeholder="e.g. Ananya Sharma" type="text" value="Ananya Sharma" />
+              <input value={customerName} onChange={e => setCustomerName(e.target.value)} className="w-full h-11 pl-10 pr-3 rounded-xl bg-surface-container-low border border-outline-variant/50 text-on-surface font-body-md text-body-md focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" placeholder="e.g. Ananya Sharma" type="text" />
             </div>
           </div>
           <div>
@@ -203,7 +282,7 @@ export default function BookingPage() {
                 <span className="">🇮🇳</span>
                 <span className="">+91</span>
               </div>
-              <input className="w-full h-11 px-3 bg-transparent text-on-surface font-body-md text-body-md focus:outline-none" placeholder="98765 43210" type="tel" value="98450 12890" />
+              <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} className="w-full h-11 px-3 bg-transparent text-on-surface font-body-md text-body-md focus:outline-none" placeholder="98765 43210" type="tel" />
               <div className="pr-3 text-secondary flex items-center">
                 <span className="material-symbols-outlined text-[20px]">sms</span>
               </div>
@@ -220,18 +299,24 @@ export default function BookingPage() {
     <div className="p-6 sm:p-8 bg-surface-container-low/50 border-t border-outline-variant/60 space-y-4">
       <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-container-lowest border border-outline-variant/60">
         <div className="flex flex-col">
-          <span className="font-label-md text-label-md text-on-surface font-semibold">HydraFacial Glow Treatment</span>
-          <span className="font-body-sm text-body-sm text-on-surface-variant">Thu, 24 Oct • 10:00 AM (45 mins)</span>
+          <span className="font-label-md text-label-md text-on-surface font-semibold">{selectedService?.name || 'Select a service'}</span>
+          <span className="font-body-sm text-body-sm text-on-surface-variant">{dates[selectedDate].dayName}, {dates[selectedDate].dayNumber} {dates[selectedDate].fullDate.toLocaleString('default', { month: 'short' })} • {selectedTime || 'Select time'} ({selectedService?.duration_minutes || 0} mins)</span>
         </div>
         <div className="text-right">
-          <span className="font-headline-sm text-headline-sm text-primary font-bold block">₹2,000</span>
+          <span className="font-headline-sm text-headline-sm text-primary font-bold block">₹{selectedService?.price?.toLocaleString('en-IN') || 0}</span>
           <span className="font-body-sm text-[11px] text-secondary font-medium">Pay at venue</span>
         </div>
       </div>
 
-      <button className="w-full py-4 px-6 rounded-xl bg-secondary hover:bg-[#005a3e] active:scale-[0.99] text-on-secondary font-label-lg text-label-lg font-semibold flex items-center justify-center gap-2 shadow-lg shadow-secondary/25 transition-all" id="confirm-booking-btn" type="button">
-        <span className="material-symbols-outlined text-[22px]">check_circle</span>
-        <span className="">Confirm Booking via WhatsApp</span>
+      <button onClick={handleBookAppointment} disabled={!selectedService || !selectedTime || !customerName || !customerPhone || isSubmitting} className="w-full py-4 px-6 rounded-xl bg-secondary hover:bg-[#005a3e] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-secondary active:scale-[0.99] text-on-secondary font-label-lg text-label-lg font-semibold flex items-center justify-center gap-2 shadow-lg shadow-secondary/25 transition-all" id="confirm-booking-btn" type="button">
+        {isSubmitting ? (
+          <span className="animate-pulse">Confirming...</span>
+        ) : (
+          <>
+            <span className="material-symbols-outlined text-[22px]">check_circle</span>
+            <span className="">Confirm Booking via WhatsApp</span>
+          </>
+        )}
       </button>
 
       <div className="flex items-center justify-center gap-1.5 text-on-surface-variant text-center">
@@ -242,45 +327,47 @@ export default function BookingPage() {
     </div>
 
     {/*  Success Tray Overlay  */}
-    <div className="hidden absolute inset-0 bg-surface-container-lowest z-30 p-6 sm:p-8 flex-col justify-between transition-opacity duration-300" id="booking-success-tray">
-      <div className="space-y-6 pt-4 text-center max-w-md mx-auto">
-        <div className="w-16 h-16 rounded-full bg-secondary-container text-on-secondary-container mx-auto flex items-center justify-center shadow-md animate-bounce">
-          <span className="material-symbols-outlined text-[36px]">done_all</span>
+    {showSuccess && (
+      <div className="absolute inset-0 bg-surface-container-lowest z-30 p-6 sm:p-8 flex-col justify-between transition-opacity duration-300 flex" id="booking-success-tray">
+        <div className="space-y-6 pt-4 text-center max-w-md mx-auto">
+          <div className="w-16 h-16 rounded-full bg-secondary-container text-on-secondary-container mx-auto flex items-center justify-center shadow-md animate-bounce">
+            <span className="material-symbols-outlined text-[36px]">done_all</span>
+          </div>
+          <div>
+            <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold">Appointment Reserved!</h2>
+            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">We dispatched your confirmation ticket to WhatsApp</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-surface-container-low text-left space-y-2.5 border border-outline-variant/60">
+            <div className="flex justify-between text-body-sm font-body-sm">
+              <span className="text-on-surface-variant">Studio</span>
+              <span className="font-medium text-on-surface">{shop.name}, {shop.city?.split(',')[0]}</span>
+            </div>
+            <div className="flex justify-between text-body-sm font-body-sm">
+              <span className="text-on-surface-variant">Service</span>
+              <span className="font-medium text-on-surface">{selectedService?.name} ({selectedService?.duration_minutes}m)</span>
+            </div>
+            <div className="flex justify-between text-body-sm font-body-sm">
+              <span className="text-on-surface-variant">Time Slot</span>
+              <span className="font-medium text-secondary font-semibold">{dates[selectedDate].offset === 0 ? 'Today' : dates[selectedDate].dayName} • {selectedTime}</span>
+            </div>
+            <div className="flex justify-between text-body-sm font-body-sm">
+              <span className="text-on-surface-variant">Recipient</span>
+              <span className="font-medium text-on-surface">+91 {customerPhone}</span>
+            </div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-[#DCF8C6] text-left border border-[#DCF8C6]">
+            <div className="flex items-center gap-1.5 text-secondary mb-1">
+              <span className="material-symbols-outlined text-[16px]">mark_chat_read</span>
+              <span className="font-label-sm text-[12px] font-semibold">WhatsApp Message Sent</span>
+            </div>
+            <p className="font-body-sm text-body-sm text-on-surface">"Hi {customerName.split(' ')[0]}! Your slot is locked for {selectedTime} {dates[selectedDate].offset === 0 ? 'today' : 'on ' + dates[selectedDate].dayName} at {shop.name}. Reply CANCEL if plans change."</p>
+          </div>
         </div>
-        <div>
-          <h2 className="font-headline-lg text-headline-lg text-on-surface font-bold">Appointment Reserved!</h2>
-          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">We dispatched your confirmation ticket to WhatsApp</p>
-        </div>
-        <div className="p-4 rounded-2xl bg-surface-container-low text-left space-y-2.5 border border-outline-variant/60">
-          <div className="flex justify-between text-body-sm font-body-sm">
-            <span className="text-on-surface-variant">Studio</span>
-            <span className="font-medium text-on-surface">Aura Wellness, Indiranagar</span>
-          </div>
-          <div className="flex justify-between text-body-sm font-body-sm">
-            <span className="text-on-surface-variant">Service</span>
-            <span className="font-medium text-on-surface">HydraFacial Glow (45m)</span>
-          </div>
-          <div className="flex justify-between text-body-sm font-body-sm">
-            <span className="text-on-surface-variant">Time Slot</span>
-            <span className="font-medium text-secondary font-semibold">Today • 10:00 AM</span>
-          </div>
-          <div className="flex justify-between text-body-sm font-body-sm">
-            <span className="text-on-surface-variant">Recipient</span>
-            <span className="font-medium text-on-surface">+91 98450 12890</span>
-          </div>
-        </div>
-        <div className="p-3.5 rounded-xl bg-[#DCF8C6] text-left border border-[#DCF8C6]">
-          <div className="flex items-center gap-1.5 text-secondary mb-1">
-            <span className="material-symbols-outlined text-[16px]">mark_chat_read</span>
-            <span className="font-label-sm text-[12px] font-semibold">WhatsApp Message Sent</span>
-          </div>
-          <p className="font-body-sm text-body-sm text-on-surface">"Hi Ananya! Your slot is locked for 10:00 AM today at Aura Wellness. Reply CANCEL if plans change."</p>
-        </div>
+        <button onClick={() => { setShowSuccess(false); setSelectedTime(''); setCustomerName(''); setCustomerPhone(''); }} className="w-full max-w-md mx-auto py-3 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors" type="button">
+          Book Another Slot
+        </button>
       </div>
-      <button className="w-full max-w-md mx-auto py-3 rounded-xl bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors" id="reset-booking-btn" type="button">
-        Back to booking flow
-      </button>
-    </div>
+    )}
   </main>
 
   {/*  Subtle Web Footer  */}
@@ -298,6 +385,6 @@ export default function BookingPage() {
     </div>
   </footer>
 </div></main></div>
-</>
+    </>
   );
 }

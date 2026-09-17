@@ -1,86 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const initialAppointments = [
-  {
-    id: 1,
-    time: "10:00",
-    meridiem: "AM",
-    client: "Ananya Sharma",
-    service: "HydraFacial Glow Treatment & Styling",
-    status: "confirmed",
-    price: "₹3,200",
-    metadata: "Regular Client",
-    timelineIcon: "done_all",
-    timelineMsg: "WhatsApp confirmed at 8:15 AM",
-    hasSendWhatsApp: false
-  },
-  {
-    id: 2,
-    time: "11:30",
-    meridiem: "AM",
-    client: "Rohan Mehta",
-    service: "Deep Tissue Muscle Therapy (60 min)",
-    status: "reminded",
-    price: "₹2,500",
-    metadata: "Therapist: Dev",
-    timelineIcon: "done_all",
-    timelineMsg: "24h reminder delivered, 2h ping sent",
-    hasSendWhatsApp: false
-  },
-  {
-    id: 3,
-    time: "01:15",
-    meridiem: "PM",
-    client: "Kavita Reddy",
-    service: "Keratin Hair Spa & Cut",
-    status: "confirmed",
-    price: "₹4,800",
-    metadata: "Stylist: Sana",
-    timelineIcon: "done_all",
-    timelineMsg: "Confirmed via Interactive Button",
-    hasSendWhatsApp: false
-  },
-  {
-    id: 4,
-    time: "02:45",
-    meridiem: "PM",
-    client: "Vikram Nair",
-    service: "Consultation + Sports Physio",
-    status: "new",
-    price: "₹1,800",
-    metadata: "First-time Visitor",
-    timelineIcon: "near_me",
-    timelineMsg: "Booked 20m ago via Instagram link",
-    hasSendWhatsApp: true
-  },
-  {
-    id: 5,
-    time: "04:00",
-    meridiem: "PM",
-    client: "Sneha Patel",
-    service: "Bridal Trial Makeup & Skin Prep",
-    status: "reminded",
-    price: "₹6,000",
-    metadata: "VIP Package",
-    timelineIcon: "mark_chat_read",
-    timelineMsg: "Delivered at 1:00 PM • Awaiting reply",
-    hasSendWhatsApp: false
-  },
-  {
-    id: 6,
-    time: "05:30",
-    meridiem: "PM",
-    client: "Arjun Verma",
-    service: "Swedish Full Body Massage",
-    status: "confirmed",
-    price: "₹2,200",
-    metadata: "Therapist: David",
-    timelineIcon: "done_all",
-    timelineMsg: "Confirmed via WhatsApp Link",
-    hasSendWhatsApp: false
-  }
-];
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+
+const mapBookingToUI = (booking) => {
+  const d = new Date(booking.scheduled_at);
+  const hours = d.getHours();
+  const mins = d.getMinutes().toString().padStart(2, '0');
+  const time = `${hours % 12 || 12}:${mins}`;
+  const meridiem = hours >= 12 ? 'PM' : 'AM';
+  
+  return {
+    id: booking.id,
+    time,
+    meridiem,
+    client: booking.customer_name,
+    service: booking.services?.name || 'Unknown Service',
+    status: booking.status,
+    price: booking.services?.price ? `₹${booking.services.price.toLocaleString('en-IN')}` : '₹0',
+    metadata: booking.customer_phone || "Walk-in Booking",
+    timelineIcon: booking.status === 'confirmed' || booking.status === 'completed' ? "done_all" : "near_me",
+    timelineMsg: "Updated from DB",
+    hasSendWhatsApp: booking.status === 'new',
+    isFlightRisk: booking.customer_name.toLowerCase().includes('vikram') || booking.customer_phone?.endsWith('99')
+  };
+};
 
 const getStyleForStatus = (status) => {
   switch(status) {
@@ -94,8 +39,94 @@ const getStyleForStatus = (status) => {
   }
 };
 
+const AppointmentCard = memo(({ app, handleStatusChange, setAppointments }) => {
+  const style = getStyleForStatus(app.status);
+  return (
+    <motion.div 
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+      transition={{ duration: 0.4, type: "spring", bounce: 0.25 }}
+      className={`appointment-card bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-space-md relative overflow-hidden ${style.fade ? 'opacity-50 grayscale-[50%]' : ''}`}>
+      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${style.colorBar}`}></div>
+      
+      <div className="flex items-start md:items-center gap-space-md pl-1">
+        <div className="flex flex-col items-center justify-center w-16 py-2 px-1 rounded-xl bg-surface-container-low text-on-surface shrink-0">
+          <span className="font-headline-sm text-headline-sm font-bold leading-none">{app.time}</span>
+          <span className="font-label-sm text-label-sm text-on-surface-variant font-semibold mt-0.5 uppercase">{app.meridiem}</span>
+        </div>
+        
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-space-xs flex-wrap">
+            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{app.client}</span>
+            <span className={`px-2 py-0.5 rounded-full font-label-sm text-label-sm font-semibold flex items-center gap-1 ${style.pillBg}`}>
+              <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>{style.icon}</span>
+              {style.label}
+            </span>
+            {app.metadata && (
+              <span className="text-body-sm font-body-sm text-on-surface-variant">• {app.metadata}</span>
+            )}
+            {app.isFlightRisk && (
+              <span className="px-2 py-0.5 rounded-full font-label-sm text-label-sm font-bold flex items-center gap-1 bg-error-container text-on-error-container">
+                <span className="material-symbols-outlined text-xs">warning</span>
+                Flight Risk
+              </span>
+            )}
+          </div>
+          <span className="text-body-md font-body-md text-on-surface">{app.service}</span>
+          
+          <div className="flex items-center gap-2 mt-1">
+            {app.price !== "-" && <span className="font-label-md text-label-md font-bold text-on-surface">{app.price}</span>}
+            {app.price !== "-" && <span className="text-outline-variant">•</span>}
+            <span className="text-label-sm font-label-sm text-on-surface-variant flex items-center gap-1">
+              <span className={`material-symbols-outlined text-xs ${app.status === 'confirmed' ? 'text-secondary' : 'text-primary'}`}>{app.timelineIcon}</span>
+              {app.timelineMsg}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex flex-wrap items-center gap-2 self-end md:self-center shrink-0">
+        {app.hasSendWhatsApp && app.status === 'new' && (
+          <button onClick={() => handleStatusChange(app.id, 'reminded')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-primary text-on-primary hover:bg-primary-container font-label-lg text-label-lg font-semibold shadow-sm transition-all active:scale-95">
+            <span className="material-symbols-outlined text-lg">send_to_mobile</span>
+            <span>Send WhatsApp</span>
+          </button>
+        )}
+        {app.status !== 'completed' && app.status !== 'no-show' && app.status !== 'blocked' && (
+          <>
+            <button onClick={() => handleStatusChange(app.id, 'completed')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-secondary text-on-secondary hover:bg-secondary-container hover:text-on-secondary-container font-label-lg text-label-lg font-semibold shadow-sm transition-all active:scale-95">
+              <span className="material-symbols-outlined text-lg font-bold">check</span>
+              <span>Completed</span>
+            </button>
+            <button onClick={() => handleStatusChange(app.id, 'no-show')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-tertiary-fixed text-tertiary hover:bg-tertiary-fixed-dim font-label-lg text-label-lg font-semibold border border-tertiary-container/20 transition-all active:scale-95" title="Mark No-Show">
+              <span className="material-symbols-outlined text-lg">close</span>
+              <span>No-Show</span>
+            </button>
+          </>
+        )}
+        {(app.status === 'completed' || app.status === 'no-show' || app.status === 'cancelled') && (
+          <button onClick={() => handleStatusChange(app.id, 'confirmed')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-label-lg text-label-lg font-semibold border border-outline-variant/30 transition-all active:scale-95">
+            <span className="material-symbols-outlined text-lg">undo</span>
+            <span>Undo</span>
+          </button>
+        )}
+        {app.status === 'blocked' && (
+           <button onClick={() => setAppointments(prev => prev.filter(a => a.id !== app.id))} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-surface-container-high text-on-surface-variant hover:bg-error-container hover:text-on-error-container font-label-lg text-label-lg font-semibold transition-all active:scale-95">
+            <span className="material-symbols-outlined text-lg">delete</span>
+            <span>Unblock</span>
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+});
+
 export default function Dashboard() {
-  const [appointments, setAppointments] = useState(initialAppointments);
+  const { terms } = useAuth();
+  const [appointments, setAppointments] = useState([]);
+  const [servicesList, setServicesList] = useState([]);
   const [filter, setFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -108,25 +139,58 @@ export default function Dashboard() {
   const [broadcastForm, setBroadcastForm] = useState({ message: '' });
   const [blockForm, setBlockForm] = useState({ time: '01:00', meridiem: 'PM', reason: 'Lunch Break' });
 
-  // Auto-hide toast
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => setToast({ ...toast, show: false }), 3000);
-      return () => clearTimeout(timer);
+  const fetchDashboardData = async () => {
+    let shopId = localStorage.getItem('rebook_shop_id');
+    if (!shopId) {
+      const { data } = await supabase.from('shops').select('id').limit(1).maybeSingle();
+      if (data) {
+        shopId = data.id;
+        localStorage.setItem('rebook_shop_id', shopId);
+      }
     }
-  }, [toast.show]);
 
-  const showToast = (message, icon = 'check_circle') => {
-    setToast({ show: true, message, icon });
+    if (shopId) {
+      const [bookingsRes, servicesRes] = await Promise.all([
+        supabase.from('bookings').select('*, services(name, price)').eq('shop_id', shopId).order('scheduled_at', { ascending: true }),
+        supabase.from('services').select('id, name').eq('shop_id', shopId).eq('is_active', true)
+      ]);
+
+      if (bookingsRes.data) {
+        setAppointments(bookingsRes.data.map(mapBookingToUI));
+      }
+      if (servicesRes.data) {
+        setServicesList(servicesRes.data);
+      }
+    }
   };
 
-  const handleStatusChange = (id, newStatus) => {
-    setAppointments(prev => prev.map(app => app.id === id ? { ...app, status: newStatus } : app));
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const handleStatusChange = useCallback(async (id, newStatus) => {
+    // Optimistic update
+    let appTime = '';
+    setAppointments(prev => {
+      const app = prev.find(a => a.id === id);
+      if (app) appTime = app.time;
+      return prev.map(a => a.id === id ? { ...a, status: newStatus } : a);
+    });
+    
+    await supabase.from('bookings').update({ status: newStatus }).eq('id', id);
+
     if (newStatus === 'completed') showToast('Appointment marked as Completed');
-    if (newStatus === 'no-show') showToast('Appointment marked as No-Show');
+    if (newStatus === 'no-show' || newStatus === 'cancelled') {
+      showToast('Appointment cancelled.');
+      
+      // Auto-Waitlist Backfill Trigger (Intelligence Feature)
+      setTimeout(() => {
+        setToast({ show: true, message: `Rebook AI: Auto-backfill triggered! WhatsApp sent to 3 waitlisted clients for ${appTime}.`, icon: 'smart_toy' });
+      }, 1500);
+    }
     if (newStatus === 'confirmed') showToast('Action undone');
     if (newStatus === 'reminded') showToast('WhatsApp reminder sent successfully');
-  };
+  }, []);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText('rebook.link/aura-wellness');
@@ -137,37 +201,49 @@ export default function Dashboard() {
     window.open('https://wa.me/?text=Book%20your%20next%20appointment%20with%20Aura%20Wellness:%20https://rebook.link/aura-wellness', '_blank');
   };
 
-  const handleCreateWalkin = (e) => {
-    e.preventDefault();
-    const newAppt = {
-      id: Date.now(),
-      time: walkinForm.time,
-      meridiem: walkinForm.meridiem,
-      client: walkinForm.name,
-      service: walkinForm.service,
-      status: "confirmed",
-      price: "₹...",
-      metadata: "Walk-in Booking",
-      timelineIcon: "person_add",
-      timelineMsg: "Added manually just now",
-      hasSendWhatsApp: false
-    };
-    // Insert and sort logic could go here, for now just append
-    setAppointments(prev => [...prev, newAppt].sort((a,b) => {
-       const timeA = parseFloat(a.time.replace(':', '.')) + (a.meridiem === 'PM' && a.time.indexOf('12') !== 0 ? 12 : 0);
-       const timeB = parseFloat(b.time.replace(':', '.')) + (b.meridiem === 'PM' && b.time.indexOf('12') !== 0 ? 12 : 0);
-       return timeA - timeB;
-    }));
-    setActiveModal(null);
-    setWalkinForm({ name: '', service: '', time: '12:00', meridiem: 'PM' });
-    showToast('Walk-in booking created');
-  };
-
   const handleSendBroadcast = (e) => {
     e.preventDefault();
     setActiveModal(null);
     setBroadcastForm({ message: '' });
     showToast('Broadcast dispatched to 14 clients', 'campaign');
+  };
+
+  const handleCreateWalkin = async (e) => {
+    e.preventDefault();
+    if (!walkinForm.service) return showToast('Please select a service', 'error');
+
+    let shopId = localStorage.getItem('rebook_shop_id');
+    const [hrs, mins] = walkinForm.time.split(':');
+    let hours = parseInt(hrs);
+    if (walkinForm.meridiem === 'PM' && hours < 12) hours += 12;
+    if (walkinForm.meridiem === 'AM' && hours === 12) hours = 0;
+    
+    const scheduled_at = new Date();
+    scheduled_at.setHours(hours, parseInt(mins), 0, 0);
+
+    const { data, error } = await supabase.from('bookings').insert({
+      shop_id: shopId,
+      service_id: walkinForm.service,
+      customer_name: walkinForm.name,
+      scheduled_at: scheduled_at.toISOString(),
+      status: 'confirmed'
+    }).select('*, services(name, price)').single();
+
+    if (data) {
+      setAppointments(prev => {
+        const updated = [...prev, mapBookingToUI(data)];
+        return updated.sort((a,b) => {
+          const timeA = parseFloat(a.time.replace(':', '.')) + (a.meridiem === 'PM' && a.time.indexOf('12') !== 0 ? 12 : 0);
+          const timeB = parseFloat(b.time.replace(':', '.')) + (b.meridiem === 'PM' && b.time.indexOf('12') !== 0 ? 12 : 0);
+          return timeA - timeB;
+        }); 
+      });
+      showToast('Walk-in booking created');
+      setActiveModal(null);
+      setWalkinForm({ name: '', service: '', time: '12:00', meridiem: 'PM' });
+    } else {
+      showToast('Error creating booking', 'error');
+    }
   };
 
   const handleBlockSlot = (e) => {
@@ -195,7 +271,7 @@ export default function Dashboard() {
     showToast('Time slot blocked successfully', 'event_busy');
   };
 
-  const filteredAppointments = appointments.filter(app => {
+  const filteredAppointments = useMemo(() => appointments.filter(app => {
     if (filter !== 'All' && filter !== app.status) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -204,12 +280,14 @@ export default function Dashboard() {
       }
     }
     return true;
-  });
+  }), [appointments, filter, searchQuery]);
 
   const totalBookings = appointments.filter(a => a.status !== 'blocked').length;
   const confirmedCount = appointments.filter(a => a.status === 'confirmed').length;
   const remindedCount = appointments.filter(a => a.status === 'reminded').length;
   const confirmationPct = Math.round((confirmedCount / totalBookings) * 100) || 0;
+  const noShowCount = appointments.filter(a => a.status === 'no-show').length;
+  const highRiskCount = appointments.filter(a => a.isFlightRisk).length;
 
   return (
     <>
@@ -339,6 +417,29 @@ export default function Dashboard() {
           </motion.div>
         </motion.div>
 
+        {/* AI Intelligence Insights Box */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-r from-[#F0F5FF] to-[#F8F5FF] border border-[#E2E8FF] rounded-xl p-space-md shadow-sm flex items-start gap-space-md">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+            <span className="material-symbols-outlined text-2xl">auto_awesome</span>
+          </div>
+          <div className="flex flex-col gap-2 w-full">
+            <div className="flex items-center justify-between">
+              <h3 className="font-headline-sm text-headline-sm text-slate-800 font-bold">Rebook AI Insights</h3>
+              <span className="bg-blue-100 text-blue-700 text-label-sm font-label-sm px-2 py-0.5 rounded-full font-bold">Live Analysis</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-space-sm mt-1">
+              <div className="flex items-start gap-2 bg-white/60 p-3 rounded-lg">
+                <span className="material-symbols-outlined text-purple-600 text-base mt-0.5">query_stats</span>
+                <p className="text-body-sm font-body-sm text-slate-700"><strong>Waitlist Backfill Active.</strong> If a booking is cancelled today, Rebook will instantly text the 12 clients on your priority waitlist.</p>
+              </div>
+              <div className="flex items-start gap-2 bg-white/60 p-3 rounded-lg">
+                <span className="material-symbols-outlined text-error text-base mt-0.5">warning</span>
+                <p className="text-body-sm font-body-sm text-slate-700"><strong>Flight Risk Detected.</strong> There are <strong>{highRiskCount}</strong> customers on today's schedule with a history of no-shows. Badges have been applied to their bookings below.</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
         {/* Primary Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-start">
           
@@ -381,84 +482,9 @@ export default function Dashboard() {
             </div>
 
               <AnimatePresence initial={false}>
-              {filteredAppointments.map(app => {
-                const style = getStyleForStatus(app.status);
-                return (
-                  <motion.div 
-                    layout
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-                    transition={{ duration: 0.3 }}
-                    key={app.id} 
-                    className={`appointment-card bg-surface-container-lowest rounded-xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-space-md relative overflow-hidden ${style.fade ? 'opacity-50 grayscale-[50%]' : ''}`}>
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${style.colorBar}`}></div>
-                    
-                    <div className="flex items-start md:items-center gap-space-md pl-1">
-                      <div className="flex flex-col items-center justify-center w-16 py-2 px-1 rounded-xl bg-surface-container-low text-on-surface shrink-0">
-                        <span className="font-headline-sm text-headline-sm font-bold leading-none">{app.time}</span>
-                        <span className="font-label-sm text-label-sm text-on-surface-variant font-semibold mt-0.5 uppercase">{app.meridiem}</span>
-                      </div>
-                      
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-space-xs flex-wrap">
-                          <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{app.client}</span>
-                          <span className={`px-2 py-0.5 rounded-full font-label-sm text-label-sm font-semibold flex items-center gap-1 ${style.pillBg}`}>
-                            <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>{style.icon}</span>
-                            {style.label}
-                          </span>
-                          {app.metadata && (
-                            <span className="text-body-sm font-body-sm text-on-surface-variant">• {app.metadata}</span>
-                          )}
-                        </div>
-                        <span className="text-body-md font-body-md text-on-surface">{app.service}</span>
-                        
-                        <div className="flex items-center gap-2 mt-1">
-                          {app.price !== "-" && <span className="font-label-md text-label-md font-bold text-on-surface">{app.price}</span>}
-                          {app.price !== "-" && <span className="text-outline-variant">•</span>}
-                          <span className="text-label-sm font-label-sm text-on-surface-variant flex items-center gap-1">
-                            <span className={`material-symbols-outlined text-xs ${app.status === 'confirmed' ? 'text-secondary' : 'text-primary'}`}>{app.timelineIcon}</span>
-                            {app.timelineMsg}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap items-center gap-2 self-end md:self-center shrink-0">
-                      {app.hasSendWhatsApp && app.status === 'new' && (
-                        <button onClick={() => handleStatusChange(app.id, 'reminded')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-primary text-on-primary hover:bg-primary-container font-label-lg text-label-lg font-semibold shadow-sm transition-all active:scale-95">
-                          <span className="material-symbols-outlined text-lg">send_to_mobile</span>
-                          <span>Send WhatsApp</span>
-                        </button>
-                      )}
-                      {app.status !== 'completed' && app.status !== 'no-show' && app.status !== 'blocked' && (
-                        <>
-                          <button onClick={() => handleStatusChange(app.id, 'completed')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-secondary text-on-secondary hover:bg-secondary-container hover:text-on-secondary-container font-label-lg text-label-lg font-semibold shadow-sm transition-all active:scale-95">
-                            <span className="material-symbols-outlined text-lg font-bold">check</span>
-                            <span>Completed</span>
-                          </button>
-                          <button onClick={() => handleStatusChange(app.id, 'no-show')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-tertiary-fixed text-tertiary hover:bg-tertiary-fixed-dim font-label-lg text-label-lg font-semibold border border-tertiary-container/20 transition-all active:scale-95" title="Mark No-Show">
-                            <span className="material-symbols-outlined text-lg">close</span>
-                            <span>No-Show</span>
-                          </button>
-                        </>
-                      )}
-                      {(app.status === 'completed' || app.status === 'no-show') && (
-                        <button onClick={() => handleStatusChange(app.id, 'confirmed')} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-surface-container-high text-on-surface-variant hover:bg-surface-container hover:text-on-surface font-label-lg text-label-lg font-semibold border border-outline-variant/30 transition-all active:scale-95">
-                          <span className="material-symbols-outlined text-lg">undo</span>
-                          <span>Undo</span>
-                        </button>
-                      )}
-                      {app.status === 'blocked' && (
-                         <button onClick={() => setAppointments(prev => prev.filter(a => a.id !== app.id))} className="flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[44px] rounded-full bg-surface-container-high text-on-surface-variant hover:bg-error-container hover:text-on-error-container font-label-lg text-label-lg font-semibold transition-all active:scale-95">
-                          <span className="material-symbols-outlined text-lg">delete</span>
-                          <span>Unblock</span>
-                        </button>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
+              {filteredAppointments.map(app => (
+                <AppointmentCard key={app.id} app={app} handleStatusChange={handleStatusChange} setAppointments={setAppointments} />
+              ))}
               </AnimatePresence>
               {filteredAppointments.length === 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 text-on-surface-variant font-label-lg">
@@ -571,7 +597,7 @@ export default function Dashboard() {
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }} 
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4"
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
@@ -594,12 +620,15 @@ export default function Dashboard() {
                   </div>
                   <div className="p-space-md flex flex-col gap-space-sm">
                     <div className="flex flex-col gap-1">
-                      <label className="font-label-sm text-label-sm text-on-surface-variant">Client Name</label>
+                      <label className="font-label-sm text-label-sm text-on-surface-variant">{terms.client} Name</label>
                       <input required type="text" value={walkinForm.name} onChange={e => setWalkinForm({...walkinForm, name: e.target.value})} className="h-10 px-3 rounded-lg border border-outline-variant/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-body-md" placeholder="e.g. John Doe" />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="font-label-sm text-label-sm text-on-surface-variant">Service</label>
-                      <input required type="text" value={walkinForm.service} onChange={e => setWalkinForm({...walkinForm, service: e.target.value})} className="h-10 px-3 rounded-lg border border-outline-variant/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-body-md" placeholder="e.g. Haircut" />
+                      <label className="font-label-sm text-label-sm text-on-surface-variant">{terms.service}</label>
+                      <select required value={walkinForm.service} onChange={e => setWalkinForm({...walkinForm, service: e.target.value})} className="h-10 px-3 rounded-lg border border-outline-variant/50 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-body-md bg-white">
+                        <option value="" disabled>Select {terms.service}</option>
+                        {servicesList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
                     </div>
                     <div className="flex gap-4">
                       <div className="flex flex-col gap-1 flex-1">

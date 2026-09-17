@@ -1,5 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Settings() {
   const [showToken, setShowToken] = useState(false);
@@ -27,8 +29,38 @@ export default function Settings() {
     }, 800);
   };
 
-  const handleSave = () => {
-    showToast("Settings Saved Successfully! All parameters synchronized.", "check_circle");
+  const { user, shop: contextShop, fetchShop } = useAuth();
+  const [shop, setShop] = useState(contextShop || { id: null, name: 'Aura Wellness Studio & Salon', city: '100ft Road, 4th Block, Indiranagar, Bengaluru, Karnataka 560038', industry: 'salon' });
+
+  useEffect(() => {
+    if (contextShop) {
+      setShop(contextShop);
+    }
+  }, [contextShop]);
+
+  const handleSave = async () => {
+    try {
+      if (shop.id) {
+        await supabase.from('shops').update({ 
+          name: shop.name, city: shop.city, industry: shop.industry
+        }).eq('id', shop.id);
+      } else {
+        const slug = shop.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.floor(Math.random()*1000);
+        const { data, error } = await supabase.from('shops').insert({ 
+          name: shop.name, city: shop.city, slug, industry: shop.industry, owner_id: user.id
+        }).select().single();
+        
+        if (data) {
+          setShop(data);
+          localStorage.setItem('rebook_shop_id', data.id);
+        }
+      }
+      if (user) await fetchShop(user.id); // Refresh global context terms
+      showToast("Settings Saved Successfully! All parameters synchronized.", "check_circle");
+    } catch (error) {
+      showToast("Failed to save settings to database.", "error");
+      console.error(error);
+    }
   };
 
   const insertTag = (tag) => {
@@ -163,7 +195,7 @@ export default function Settings() {
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-on-surface-variant tracking-wide uppercase">Business Name</label>
                 <div className="relative">
-                  <input type="text" defaultValue="Aura Wellness Studio & Salon" className="w-full bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all font-medium" />
+                  <input type="text" value={shop.name} onChange={e => setShop({...shop, name: e.target.value})} className="w-full bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all font-medium" />
                   <span className="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant/50 text-lg">verified</span>
                 </div>
               </div>
@@ -179,7 +211,7 @@ export default function Settings() {
               <div className="md:col-span-2 space-y-1.5">
                 <label className="block text-xs font-semibold text-on-surface-variant tracking-wide uppercase">Studio / Business Physical Address</label>
                 <div className="relative">
-                  <input type="text" defaultValue="100ft Road, 4th Block, Indiranagar, Bengaluru, Karnataka 560038" className="w-full bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all" />
+                  <input type="text" value={shop.city} onChange={e => setShop({...shop, city: e.target.value})} className="w-full bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all" />
                   <span className="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant/50 text-lg">location_on</span>
                 </div>
                 <p className="text-[11px] text-on-surface-variant/70">This address is automatically embedded into Google Maps links sent via WhatsApp.</p>
@@ -201,11 +233,11 @@ export default function Settings() {
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-on-surface-variant tracking-wide uppercase">Industry Category</label>
                 <div className="relative">
-                  <select className="w-full appearance-none bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all font-medium pr-10">
-                    <option>Salon & Aesthetic Wellness Clinic</option>
-                    <option>Fitness Center / Gym / Yoga Studio</option>
-                    <option>Dental & Healthcare Clinic</option>
-                    <option>Pet Care & Grooming</option>
+                  <select value={shop.industry || 'salon'} onChange={e => setShop({...shop, industry: e.target.value})} className="w-full appearance-none bg-surface border border-outline-variant/50 rounded-xl px-3.5 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all font-medium pr-10">
+                    <option value="salon">Salon & Aesthetic Wellness Clinic</option>
+                    <option value="gym">Fitness Center / Gym / Yoga Studio</option>
+                    <option value="clinic">Dental & Healthcare Clinic</option>
+                    <option value="cafe">Cafe / Restaurant</option>
                   </select>
                   <span className="material-symbols-outlined absolute right-3 top-2.5 text-on-surface-variant/50 pointer-events-none text-xl">expand_more</span>
                 </div>
