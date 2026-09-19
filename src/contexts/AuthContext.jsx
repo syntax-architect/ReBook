@@ -6,35 +6,35 @@ const AuthContext = createContext();
 
 const industryConfigs = {
   salon: {
-    service: "Service",
-    services: "Services",
-    client: "Client",
-    staff: "Stylist/Therapist"
+    service: 'Service',
+    services: 'Services',
+    client: 'Client',
+    staff: 'Stylist/Therapist',
   },
   gym: {
-    service: "Class",
-    services: "Classes",
-    client: "Member",
-    staff: "Trainer"
+    service: 'Class',
+    services: 'Classes',
+    client: 'Member',
+    staff: 'Trainer',
   },
   cafe: {
-    service: "Table",
-    services: "Reservations",
-    client: "Guest",
-    staff: "Server"
+    service: 'Table',
+    services: 'Reservations',
+    client: 'Guest',
+    staff: 'Server',
   },
   clinic: {
-    service: "Consultation",
-    services: "Appointments",
-    client: "Patient",
-    staff: "Doctor"
-  }
+    service: 'Consultation',
+    services: 'Appointments',
+    client: 'Patient',
+    staff: 'Doctor',
+  },
 };
 
 export const AuthProvider = ({ children }) => {
   const { user, isLoaded: userLoaded } = useUser();
   const { signOut, isLoaded: authLoaded } = useClerkAuth();
-  
+
   const [shop, setShop] = useState(null);
   const [terms, setTerms] = useState(industryConfigs.salon);
   const [loading, setLoading] = useState(true);
